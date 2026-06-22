@@ -1,0 +1,94 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Profile information for buyers and sellers of EA bots",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "The unique user identifier matching Firebase UID" },
+        "email": { "type": "string", "description": "User email address" },
+        "displayName": { "type": "string", "description": "User display name" },
+        "photoURL": { "type": "string", "description": "User avatar URL" },
+        "sellerStatus": { "type": "string", "enum": ["none", "approved"], "description": "Seller approval status" },
+        "balance": { "type": "number", "description": "Simulated dollar balance for purchasing bots" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
+      },
+      "required": ["id", "email", "displayName", "sellerStatus", "balance", "createdAt"]
+    },
+    "EABot": {
+      "title": "EABot",
+      "description": "An Expert Advisor trading bot listed for sale",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique bot identifier" },
+        "ownerId": { "type": "string", "description": "UID of the creator/seller" },
+        "ownerName": { "type": "string", "description": "Name of the creator/seller" },
+        "name": { "type": "string", "description": "Name of the EA Bot" },
+        "description": { "type": "string", "description": "Detailed trading description and features" },
+        "category": { "type": "string", "enum": ["Forex", "Crypto", "Indices", "Commodities"], "description": "Market focus" },
+        "platform": { "type": "string", "enum": ["MT4", "MT5", "Both"], "description": "Compatible Metatrader version" },
+        "strategy": { "type": "string", "enum": ["Grid", "Hedging", "Scalping", "Trend", "Arbitrage", "News"], "description": "Underlying algorithm logic" },
+        "price": { "type": "number", "description": "Price in simulated USD (0 means Free)" },
+        "winRate": { "type": "number", "description": "Tested win percentage (e.g. 68.5)" },
+        "monthlyProfit": { "type": "number", "description": "Average expected monthly percentage return (e.g. 15.2)" },
+        "maxDrawdown": { "type": "number", "description": "Maximum backtested drawdown percentage (e.g. 9.4)" },
+        "downloads": { "type": "number", "description": "Number of purchases or downloads" },
+        "rating": { "type": "number", "description": "Average user rating" },
+        "status": { "type": "string", "enum": ["active", "inactive"], "description": "Marketplace listing state" },
+        "sourceFileName": { "type": "string", "description": "Dummy source code executable filename (.ex4, .ex5)" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp when bot was listed" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Timestamp when bot listing was last edited" }
+      },
+      "required": ["id", "ownerId", "ownerName", "name", "description", "category", "platform", "strategy", "price", "winRate", "monthlyProfit", "maxDrawdown", "downloads", "rating", "status", "sourceFileName", "createdAt", "updatedAt"]
+    },
+    "Purchase": {
+      "title": "Purchase",
+      "description": "Record of an EA Bot purchased by a buyer",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Purchase transaction ID (user_bot format)" },
+        "buyerId": { "type": "string", "description": "UID of the buyer" },
+        "botId": { "type": "string", "description": "ID of the purchased bot" },
+        "botName": { "type": "string", "description": "Name of the purchased bot" },
+        "price": { "type": "number", "description": "Amount paid" },
+        "licenseKey": { "type": "string", "description": "Simulated terminal licensing key generated for the buyer" },
+        "purchaseDate": { "type": "string", "format": "date-time", "description": "Timestamp of purchase" }
+      },
+      "required": ["id", "buyerId", "botId", "botName", "price", "licenseKey", "purchaseDate"]
+    },
+    "Review": {
+      "title": "Review",
+      "description": "User feedback review given to an EA Bot",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique review identifier" },
+        "userId": { "type": "string", "description": "UID of reviewer" },
+        "userName": { "type": "string", "description": "Name of reviewer" },
+        "userPhoto": { "type": "string", "description": "Reviewer's picture URL" },
+        "botId": { "type": "string", "description": "ID of reviewed bot" },
+        "rating": { "type": "number", "description": "Rating score from 1 to 5" },
+        "comment": { "type": "string", "description": "Content of the written review" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Date reviewed" }
+      },
+      "required": ["id", "userId", "userName", "userPhoto", "botId", "rating", "comment", "createdAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "Profiles for registered buyers and sellers"
+    },
+    "bots/{botId}": {
+      "schema": "EABot",
+      "description": "Expert Advisor bots catalog available on the marketplace"
+    },
+    "purchases/{purchaseId}": {
+      "schema": "Purchase",
+      "description": "Acquisition logs for tracking user-owned licensing"
+    },
+    "reviews/{reviewId}": {
+      "schema": "Review",
+      "description": "Reviews and ratings for individual listed bots"
+    }
+  }
+}
