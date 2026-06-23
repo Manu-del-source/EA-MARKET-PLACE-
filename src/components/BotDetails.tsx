@@ -3,33 +3,11 @@ import { EABot, UserProfile, Purchase, Review, ChartPoint } from '../types';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { collection, addDoc, updateDoc, doc, setDoc, query, where, getDocs, deleteDoc, Timestamp } from 'firebase/firestore';
 import { generateBacktestCurve, simulateDownloadFile } from '../utils/simulation';
-import { 
-  ResponsiveContainer, 
-  LineChart, 
-  Line, 
-  XAxis, 
-  YAxis, 
-  Tooltip, 
-  CartesianGrid,
-  Legend
-} from 'recharts';
-import { 
-  ArrowLeft, 
-  Settings, 
-  Activity, 
-  FileCode, 
-  Download, 
-  CheckCircle2, 
-  AlertTriangle, 
-  PlusCircle, 
-  Star, 
-  Trash2,
-  Lock,
-  Cpu,
-  RefreshCw,
-  MessageCircle,
-  X,
-  Send
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts';
+import {
+  ArrowLeft, Settings, Activity, FileCode, Download, CheckCircle2,
+  PlusCircle, Star, Trash2, Lock, Cpu, RefreshCw, MessageCircle,
+  X, Send, Zap, TrendingUp, Shield
 } from 'lucide-react';
 
 interface BotDetailsProps {
@@ -42,680 +20,453 @@ interface BotDetailsProps {
 
 export default function BotDetails({ bot, userProfile, onBack, owned, onPurchaseSuccess }: BotDetailsProps) {
   const [chartData, setChartData] = useState<ChartPoint[]>([]);
-  const [profitGrowthData, setProfitGrowthData] = useState<{ month: string; "Profit Growth (%)": number; "Target Average (%)": number }[]>([]);
+  const [profitGrowthData, setProfitGrowthData] = useState<any[]>([]);
   const [chartTab, setChartTab] = useState<'profit6m' | 'balance12m'>('profit6m');
   const [reviews, setReviews] = useState<Review[]>([]);
   const [purchasing, setPurchasing] = useState(false);
   const [licenseInfo, setLicenseInfo] = useState<Purchase | null>(null);
-  
-  // Review form states
   const [comment, setComment] = useState('');
   const [rating, setRating] = useState(5);
   const [submittingReview, setSubmittingReview] = useState(false);
-  
-  // Download states
   const [downloadedFile, setDownloadedFile] = useState<string | null>(null);
-
-  // Chat Modal States
   const [showChatModal, setShowChatModal] = useState(false);
   const [chatMessage, setChatMessage] = useState('');
   const [chatSent, setChatSent] = useState(false);
 
-  // Generate chart data based on bot parameters
   useEffect(() => {
     setChartData(generateBacktestCurve(bot.winRate, bot.monthlyProfit, bot.maxDrawdown));
-    
-    // Generate simulated past 6 months profit growth data
-    // We base it on current date (June 2026 as per our environment metadata: June 21, 2026)
-    // The past 6 completed months: Jan 26, Feb 26, Mar 26, Apr 26, May 26, Jun 26
-    const pData = [];
-    const months = ["Jan 26", "Feb 26", "Mar 26", "Apr 26", "May 26", "Jun 26"];
+    const months = ['Jan 26', 'Feb 26', 'Mar 26', 'Apr 26', 'May 26', 'Jun 26'];
     const seed = bot.name.charCodeAt(0) + bot.name.charCodeAt(bot.name.length - 1);
-    
-    for (let i = 0; i < 6; i++) {
-      // Create some variance based on winRate + maxDrawdown
-      const monthFactor = 0.8 + ((seed * (i + 3)) % 45) / 100; // variance factor around 0.8 - 1.25
-      const randomJitter = (Math.random() * 0.1) - 0.05; // small random factor
-      const profitVal = parseFloat((bot.monthlyProfit * (monthFactor + randomJitter)).toFixed(2));
-      
-      pData.push({
-        month: months[i],
-        "Profit Growth (%)": profitVal,
-        "Target Average (%)": bot.monthlyProfit
-      });
-    }
+    const pData = months.map((month, i) => {
+      const mf = 0.8 + ((seed * (i + 3)) % 45) / 100;
+      const jitter = (Math.random() * 0.1) - 0.05;
+      return {
+        month,
+        'Profit Growth (%)': parseFloat((bot.monthlyProfit * (mf + jitter)).toFixed(2)),
+        'Target Average (%)': bot.monthlyProfit,
+      };
+    });
     setProfitGrowthData(pData);
-
     loadReviews();
-    if (owned && userProfile) {
-      loadLicenseInfo();
-    }
+    if (owned && userProfile) loadLicenseInfo();
   }, [bot.id, bot.winRate, bot.monthlyProfit, bot.maxDrawdown, bot.name, owned, userProfile?.id]);
 
   const loadReviews = async () => {
-    const q = query(collection(db, 'reviews'), where('botId', '==', bot.id));
     try {
-      const snap = await getDocs(q);
+      const snap = await getDocs(query(collection(db, 'reviews'), where('botId', '==', bot.id)));
       const revs: Review[] = [];
-      snap.forEach(docSnap => {
-        revs.push({ id: docSnap.id, ...docSnap.data() } as Review);
-      });
-      // Sort reviews descending by date
-      revs.sort((a, b) => {
-        const tA = a.createdAt?.seconds || 0;
-        const tB = b.createdAt?.seconds || 0;
-        return tB - tA;
-      });
+      snap.forEach(d => revs.push({ id: d.id, ...d.data() } as Review));
+      revs.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
       setReviews(revs);
-    } catch (e) {
-      handleFirestoreError(e, OperationType.LIST, 'reviews');
-    }
+    } catch (e) { handleFirestoreError(e, OperationType.LIST, 'reviews'); }
   };
 
   const loadLicenseInfo = async () => {
     if (!userProfile) return;
-    const purchaseId = `${userProfile.id}_${bot.id}`;
     try {
-      const docSnap = await getDocs(query(collection(db, 'purchases'), 
-        where('buyerId', '==', userProfile.id), 
-        where('botId', '==', bot.id)
-      ));
-      if (!docSnap.empty) {
-        setLicenseInfo({ id: docSnap.docs[0].id, ...docSnap.docs[0].data() } as Purchase);
-      }
-    } catch (e) {
-      handleFirestoreError(e, OperationType.GET, `purchases/${purchaseId}`);
-    }
+      const snap = await getDocs(query(collection(db, 'purchases'),
+        where('buyerId', '==', userProfile.id), where('botId', '==', bot.id)));
+      if (!snap.empty) setLicenseInfo({ id: snap.docs[0].id, ...snap.docs[0].data() } as Purchase);
+    } catch (e) { handleFirestoreError(e, OperationType.GET, 'purchases'); }
   };
 
   const handleCheckout = async () => {
-    if (!userProfile) return;
-    if (userProfile.balance < bot.price) {
-      alert("Simulated balance insufficient! Add $1,000 using the 'Sim Balance' link in the top bar.");
+    if (!userProfile || userProfile.balance < bot.price) {
+      alert("Insufficient simulated balance! Click 'Balance' in the nav to top up.");
       return;
     }
-
     setPurchasing(true);
     const purchaseId = `${userProfile.id}_${bot.id}`;
-    // Generate terminal-acceptable 16-char GUID license key
-    const generatedLicense = "MT-" + Math.random().toString(36).substring(2, 10).toUpperCase() + "-" + Math.random().toString(36).substring(2, 6).toUpperCase();
-    
+    const licenseKey = 'MT-' + Math.random().toString(36).substring(2, 10).toUpperCase() + '-' + Math.random().toString(36).substring(2, 6).toUpperCase();
     try {
-      // 1. Write the purchase lock (representing an immutable payment receipt)
-      const purchaseRef = doc(db, 'purchases', purchaseId);
-      await setDoc(purchaseRef, {
-        id: purchaseId,
-        buyerId: userProfile.id,
-        botId: bot.id,
-        botName: bot.name,
-        price: bot.price,
-        licenseKey: generatedLicense,
-        purchaseDate: Timestamp.now()
+      await setDoc(doc(db, 'purchases', purchaseId), {
+        id: purchaseId, buyerId: userProfile.id, botId: bot.id,
+        botName: bot.name, price: bot.price, licenseKey, purchaseDate: Timestamp.now(),
       });
-
-      // 2. Debit client's simulated funds
-      const userRef = doc(db, 'users', userProfile.id);
-      await updateDoc(userRef, {
-        balance: userProfile.balance - bot.price
-      });
-
-      // 3. Increment EA download count
-      const botRef = doc(db, 'bots', bot.id);
-      await updateDoc(botRef, {
-        downloads: bot.downloads + 1,
-        updatedAt: Timestamp.now()
-      });
-
-      // 4. Update parent state
+      await updateDoc(doc(db, 'users', userProfile.id), { balance: userProfile.balance - bot.price });
+      await updateDoc(doc(db, 'bots', bot.id), { downloads: bot.downloads + 1, updatedAt: Timestamp.now() });
+      const lic = { id: purchaseId, buyerId: userProfile.id, botId: bot.id, botName: bot.name, price: bot.price, licenseKey, purchaseDate: Timestamp.now() };
       onPurchaseSuccess(bot.id, bot.price);
-      setLicenseInfo({
-        id: purchaseId,
-        buyerId: userProfile.id,
-        botId: bot.id,
-        botName: bot.name,
-        price: bot.price,
-        licenseKey: generatedLicense,
-        purchaseDate: Timestamp.now()
-      });
-
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `purchases/${purchaseId}`);
-    } finally {
-      setPurchasing(false);
-    }
+      setLicenseInfo(lic);
+    } catch (err) { handleFirestoreError(err, OperationType.WRITE, `purchases/${purchaseId}`); }
+    finally { setPurchasing(false); }
   };
 
   const handleSubmitReview = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userProfile || !comment.trim()) return;
-
     setSubmittingReview(true);
     const reviewId = `${userProfile.id}_${bot.id}_rev`;
     const newReview: Omit<Review, 'id'> = {
-      userId: userProfile.id,
-      userName: userProfile.displayName,
-      userPhoto: userProfile.photoURL,
-      botId: bot.id,
-      rating,
-      comment: comment.trim(),
-      createdAt: Timestamp.now()
+      userId: userProfile.id, userName: userProfile.displayName,
+      userPhoto: userProfile.photoURL, botId: bot.id,
+      rating, comment: comment.trim(), createdAt: Timestamp.now(),
     };
-
     try {
-      // Create review document in reviews collection
       await setDoc(doc(db, 'reviews', reviewId), newReview);
-      
-      // Clear form inputs
       setComment('');
-      loadReviews();
-
-      // Recalculate Bot average rating
-      // For dynamic responsiveness without complex backend triggers:
+      await loadReviews();
       const allRevs = [...reviews, { id: reviewId, ...newReview } as Review];
-      const avgRating = parseFloat((allRevs.reduce((acc, curr) => acc + curr.rating, 0) / allRevs.length).toFixed(1));
-      
-      const botRef = doc(db, 'bots', bot.id);
-      await updateDoc(botRef, {
-        rating: avgRating,
-        updatedAt: Timestamp.now()
-      });
-
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `reviews/${reviewId}`);
-    } finally {
-      setSubmittingReview(false);
-    }
+      const avg = parseFloat((allRevs.reduce((a, r) => a + r.rating, 0) / allRevs.length).toFixed(1));
+      await updateDoc(doc(db, 'bots', bot.id), { rating: avg, updatedAt: Timestamp.now() });
+    } catch (err) { handleFirestoreError(err, OperationType.WRITE, `reviews/${reviewId}`); }
+    finally { setSubmittingReview(false); }
   };
 
   const handleDeleteReview = async (reviewId: string) => {
     if (!userProfile) return;
     try {
       await deleteDoc(doc(db, 'reviews', reviewId));
-      const updatedRevs = reviews.filter(r => r.id !== reviewId);
-      setReviews(updatedRevs);
-
-      // Recalculate rating
-      const avgRating = updatedRevs.length === 0 
-        ? 0 
-        : parseFloat((updatedRevs.reduce((acc, curr) => acc + curr.rating, 0) / updatedRevs.length).toFixed(1));
-      
-      const botRef = doc(db, 'bots', bot.id);
-      await updateDoc(botRef, {
-        rating: avgRating,
-        updatedAt: Timestamp.now()
-      });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `reviews/${reviewId}`);
-    }
+      const updated = reviews.filter(r => r.id !== reviewId);
+      setReviews(updated);
+      const avg = updated.length === 0 ? 0 : parseFloat((updated.reduce((a, r) => a + r.rating, 0) / updated.length).toFixed(1));
+      await updateDoc(doc(db, 'bots', bot.id), { rating: avg, updatedAt: Timestamp.now() });
+    } catch (err) { handleFirestoreError(err, OperationType.DELETE, `reviews/${reviewId}`); }
   };
 
-  const triggerDownloadSim = () => {
-    if (!licenseInfo) return;
-    const fileSource = simulateDownloadFile(bot.name, bot.sourceFileName, licenseInfo.licenseKey);
-    setDownloadedFile(fileSource);
-  };
-
-  const handleSendMessage = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!chatMessage.trim()) return;
-    setChatSent(true);
-    setTimeout(() => {
-      setShowChatModal(false);
-      setChatSent(false);
-      setChatMessage('');
-    }, 2500);
+  const tooltipStyle = {
+    contentStyle: {
+      backgroundColor: '#0b1629',
+      borderColor: 'rgba(6,182,212,0.2)',
+      borderRadius: '12px',
+      fontFamily: 'monospace',
+      fontSize: '11px',
+      boxShadow: '0 20px 50px rgba(0,0,0,0.6)',
+    },
+    labelStyle: { color: '#22d3ee', fontFamily: 'monospace' },
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in text-white/90">
-      
-      {/* Back button */}
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
+      {/* Back */}
       <button
         onClick={onBack}
-        className="flex items-center space-x-2 text-slate-400 hover:text-white bg-slate-800/40 hover:bg-slate-800 border border-slate-800 rounded-xl px-4 py-2 text-xs font-semibold mr-auto transition-all mb-8"
+        className="flex items-center gap-2 text-slate-500 hover:text-cyan-400 bg-white/3 hover:bg-cyan-500/8 border border-white/8 hover:border-cyan-500/25 rounded-xl px-4 py-2 text-xs font-bold transition-all mb-8"
       >
-        <ArrowLeft className="w-4 h-4" />
-        <span>Return to Marketplace</span>
+        <ArrowLeft className="w-4 h-4" /> Back to Marketplace
       </button>
 
-      {/* Hero Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-        
-        {/* Core Product Details (Col-2) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10">
+        {/* Left panel */}
         <div className="lg:col-span-2 space-y-6">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          {/* Main info card */}
+          <div className="card-ink rounded-2xl p-6 sm:p-8">
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-5 mb-6">
               <div>
-                <span className="text-xs font-mono text-emerald-400 font-semibold uppercase tracking-widest block mb-1">
-                  {bot.strategy} EA
-                </span>
-                <h1 className="text-3xl font-bold font-sans tracking-tight text-white mb-1.5">
-                  {bot.name}
-                </h1>
-                <p className="text-sm text-slate-400 font-medium">
-                  Listed by <span className="text-slate-300 font-semibold">{bot.ownerName}</span>
-                </p>
-              </div>
-
-              <div className="flex items-center space-x-3.5">
-                <div className="bg-slate-950 px-4 py-2 border border-slate-800 rounded-2xl text-center">
-                  <span className="text-[10px] text-slate-400 uppercase font-mono block">Platform</span>
-                  <span className="text-sm font-sans font-extrabold text-emerald-400">{bot.platform}</span>
+                <div className="flex items-center gap-2 mb-3 flex-wrap">
+                  <span className="text-[10px] font-mono font-bold text-cyan-400/80 uppercase tracking-widest bg-cyan-500/8 border border-cyan-500/18 px-2.5 py-1 rounded-lg">
+                    {bot.strategy}
+                  </span>
+                  <span className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-widest bg-white/4 border border-white/8 px-2.5 py-1 rounded-lg">
+                    {bot.category}
+                  </span>
                 </div>
-                <div className="bg-slate-950 px-4 py-2 border border-slate-800 rounded-2xl text-center">
-                  <span className="text-[10px] text-slate-400 uppercase font-mono block">Market</span>
-                  <span className="text-sm font-sans font-extrabold text-blue-400">{bot.category}</span>
+                <h1 className="text-3xl font-black text-white tracking-tight mb-1">{bot.name}</h1>
+                <p className="text-sm text-slate-500">by <span className="text-slate-300 font-semibold">{bot.ownerName}</span></p>
+              </div>
+              <div className="flex gap-3 shrink-0">
+                <div className="bg-cyan-500/8 border border-cyan-500/18 rounded-xl px-4 py-2.5 text-center">
+                  <div className="text-[9px] text-slate-500 font-mono uppercase tracking-wider">Platform</div>
+                  <div className="text-sm font-black text-cyan-400 mt-0.5 font-mono">{bot.platform}</div>
+                </div>
+                <div className="bg-violet-500/8 border border-violet-500/18 rounded-xl px-4 py-2.5 text-center">
+                  <div className="text-[9px] text-slate-500 font-mono uppercase tracking-wider">Downloads</div>
+                  <div className="text-sm font-black text-violet-400 mt-0.5 font-mono">{bot.downloads}</div>
                 </div>
               </div>
             </div>
 
-            {/* Description */}
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-2 border-b border-slate-800 pb-2">Description & Strategy</h3>
-            <p className="text-slate-300 text-sm leading-relaxed mb-6 whitespace-pre-wrap">
-              {bot.description}
-            </p>
+            <div className="border-t border-cyan-500/8 pt-5 mb-5">
+              <h4 className="text-[10px] font-mono text-slate-500 uppercase tracking-widest mb-3">Strategy Overview</h4>
+              <p className="text-slate-300 text-sm leading-relaxed whitespace-pre-wrap">{bot.description}</p>
+            </div>
 
-            {/* Statistics Row */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-slate-950/80 p-5 rounded-2xl border border-slate-800/80">
-              <div className="text-center md:text-left">
-                <span className="text-xs text-slate-500 font-mono block uppercase">Expected Returns</span>
-                <span className="text-xl font-mono text-emerald-450 font-bold text-emerald-400 mt-1 block">
-                  +{bot.monthlyProfit}% <span className="text-xs font-normal text-slate-400">/ mo</span>
-                </span>
-              </div>
-              <div className="text-center md:text-left border-t md:border-t-0 md:border-l border-slate-800 pt-3 md:pt-0 md:pl-5">
-                <span className="text-xs text-slate-500 font-mono block uppercase">Max Drawdown</span>
-                <span className="text-xl font-mono text-rose-400 font-bold mt-1 block">
-                  {bot.maxDrawdown}% <span className="text-xs font-normal text-slate-400">(Tested)</span>
-                </span>
-              </div>
-              <div className="text-center md:text-left border-t md:border-t-0 md:border-l border-slate-800 pt-3 md:pt-0 md:pl-5">
-                <span className="text-xs text-slate-500 font-mono block uppercase">Win Ratio</span>
-                <span className="text-xl font-mono text-amber-400 font-bold mt-1 block">
-                  {bot.winRate}% <span className="text-xs font-normal text-slate-400">rate</span>
-                </span>
-              </div>
-              <div className="text-center md:text-left border-t md:border-t-0 md:border-l border-slate-800 pt-3 md:pt-0 md:pl-5">
-                <span className="text-xs text-slate-500 font-mono block uppercase">Downloads</span>
-                <span className="text-xl font-mono text-blue-400 font-bold mt-1 block">
-                  {bot.downloads} <span className="text-xs font-normal text-slate-400">licenses</span>
-                </span>
-              </div>
+            {/* Metrics grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-0 bg-black/30 border border-cyan-500/8 rounded-xl overflow-hidden">
+              {[
+                { label: 'Monthly Return', value: `+${bot.monthlyProfit}%`, sub: '/mo', color: 'text-emerald-400' },
+                { label: 'Max Drawdown', value: `${bot.maxDrawdown}%`, sub: '', color: 'text-red-400' },
+                { label: 'Win Rate', value: `${bot.winRate}%`, sub: '', color: 'text-cyan-400' },
+                { label: 'Rating', value: bot.rating > 0 ? bot.rating.toFixed(1) : 'N/A', sub: '/5', color: 'text-violet-400' },
+              ].map((m, i) => (
+                <div key={i} className={`p-4 ${i > 0 ? 'border-l border-cyan-500/8' : ''}`}>
+                  <div className="text-[9px] text-slate-500 font-mono uppercase tracking-wider mb-1">{m.label}</div>
+                  <div className={`text-xl font-mono font-black ${m.color}`}>
+                    {m.value}<span className="text-xs text-slate-500 font-normal">{m.sub}</span>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
-          {/* Performance Curves Graph */}
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 pb-3 border-b border-slate-850 gap-4">
-              <div className="flex items-center space-x-2">
-                <Activity className="w-5 h-5 text-emerald-400" />
-                <h3 className="text-base font-bold font-sans text-white">Simulated Historical Performance</h3>
+          {/* Chart */}
+          <div className="card-ink rounded-2xl p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-5 gap-4">
+              <div className="flex items-center gap-2">
+                <Activity className="w-5 h-5 text-cyan-400" />
+                <h3 className="text-base font-bold text-white">Simulated Performance</h3>
               </div>
-              
-              {/* Tab Toggles for Charts */}
-              <div className="flex bg-slate-950 p-1 border border-slate-800 rounded-xl">
-                <button
-                  onClick={() => setChartTab('profit6m')}
-                  type="button"
-                  className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all ${
-                    chartTab === 'profit6m' 
-                      ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400' 
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  6M Profit Growth
-                </button>
-                <button
-                  onClick={() => setChartTab('balance12m')}
-                  type="button"
-                  className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all ${
-                    chartTab === 'balance12m' 
-                      ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400' 
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  12M Equity Curve
-                </button>
+              <div className="flex bg-black/40 border border-cyan-500/10 rounded-xl p-1">
+                {(['profit6m', 'balance12m'] as const).map(tab => (
+                  <button key={tab} onClick={() => setChartTab(tab)}
+                    className={`px-4 py-1.5 rounded-lg text-xs font-mono font-bold transition-all ${
+                      chartTab === tab
+                        ? 'bg-cyan-500/12 border border-cyan-500/25 text-cyan-400'
+                        : 'text-slate-500 hover:text-slate-300'
+                    }`}
+                  >
+                    {tab === 'profit6m' ? '6M Profit' : '12M Equity'}
+                  </button>
+                ))}
               </div>
             </div>
-
-            {chartTab === 'profit6m' ? (
-              <div>
-                <div className="flex justify-between items-center mb-4">
-                  <span className="text-xs text-slate-400 font-mono">TREND: Monthly Net Income Growth</span>
-                  <span className="text-[10px] bg-emerald-500/10 text-emerald-400 px-2 py-1 rounded font-mono uppercase font-semibold">
-                    Simulated Past 6 Months
-                  </span>
-                </div>
-                <div className="h-[280px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={profitGrowthData} margin={{ top: 10, right: 10, left: -20, bottom: 5 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                      <XAxis dataKey="month" stroke="#64748b" style={{ fontSize: '10px', fontFamily: 'monospace' }} />
-                      <YAxis stroke="#64748b" unit="%" style={{ fontSize: '10px', fontFamily: 'monospace' }} />
-                      <Tooltip 
-                        contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '12px' }}
-                        labelStyle={{ color: '#fff', fontFamily: 'monospace', fontSize: '11px' }}
-                        itemStyle={{ fontFamily: 'monospace', fontSize: '11px' }}
-                      />
-                      <Legend wrapperStyle={{ fontSize: '11px', fontFamily: 'monospace' }} />
-                      <Line 
-                        type="monotone" 
-                        dataKey="Profit Growth (%)" 
-                        stroke="#10b981" 
-                        strokeWidth={3} 
-                        activeDot={{ r: 8 }} 
-                        dot={{ stroke: '#059669', strokeWidth: 2, r: 4 }}
-                        name="Profit Growth (%)" 
-                      />
-                      <Line 
-                        type="monotone" 
-                        dataKey="Target Average (%)" 
-                        stroke="#64748b" 
-                        strokeWidth={1.5} 
-                        strokeDasharray="5 5" 
-                        name="Target Mean (%)" 
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-                <p className="text-[10px] text-slate-500 font-mono text-center mt-2">
-                  This trend line projects monthly algorithmic profit growth from January to June 2026 based on winRate ({bot.winRate}%) parameters.
-                </p>
-              </div>
-            ) : (
-              <div>
-                <div className="flex justify-between items-center mb-4">
-                  <span className="text-xs text-slate-400 font-mono">PROGRESSION: Capital Balance vs Equity</span>
-                  <span className="text-[10px] bg-emerald-500/10 text-emerald-400 px-2 py-1 rounded font-mono uppercase font-semibold">
-                    10K Start Capital
-                  </span>
-                </div>
-                <div className="h-[280px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 5 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                      <XAxis dataKey="period" stroke="#64748b" style={{ fontSize: '10px', fontFamily: 'monospace' }} />
-                      <YAxis stroke="#64748b" style={{ fontSize: '10px', fontFamily: 'monospace' }} />
-                      <Tooltip 
-                        contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '12px' }}
-                        labelStyle={{ color: '#fff' }}
-                      />
-                      <Legend wrapperStyle={{ fontSize: '11px', fontFamily: 'monospace' }} />
-                      <Line type="monotone" dataKey="Balance" stroke="#34d399" strokeWidth={2.5} activeDot={{ r: 8 }} name="Balance ($)" />
-                      <Line type="monotone" dataKey="Equity" stroke="#60a5fa" strokeWidth={1.5} strokeDasharray="5 5" name="Equity ($)" />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-                <p className="text-[10px] text-slate-500 font-mono text-center mt-2">
-                  Note: Simulative rendering generated dynamically matching winRate ({bot.winRate}%) and drawdown limits. Past performance does not guarantee future results.
-                </p>
-              </div>
-            )}
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart
+                  data={chartTab === 'profit6m' ? profitGrowthData : chartData}
+                  margin={{ top: 10, right: 10, left: -20, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(6,182,212,0.06)" />
+                  <XAxis dataKey={chartTab === 'profit6m' ? 'month' : 'period'} stroke="#1e3a4a" style={{ fontSize: '10px', fontFamily: 'monospace' }} />
+                  <YAxis stroke="#1e3a4a" unit={chartTab === 'profit6m' ? '%' : ''} style={{ fontSize: '10px', fontFamily: 'monospace' }} />
+                  <Tooltip {...tooltipStyle} />
+                  <Legend wrapperStyle={{ fontSize: '11px', fontFamily: 'monospace' }} />
+                  {chartTab === 'profit6m' ? (
+                    <>
+                      <Line type="monotone" dataKey="Profit Growth (%)" stroke="#06b6d4" strokeWidth={2.5} activeDot={{ r: 7, fill: '#22d3ee' }} dot={{ stroke: '#0891b2', strokeWidth: 2, r: 3, fill: '#06b6d4' }} />
+                      <Line type="monotone" dataKey="Target Average (%)" stroke="#1e3a5f" strokeWidth={1.5} strokeDasharray="5 5" />
+                    </>
+                  ) : (
+                    <>
+                      <Line type="monotone" dataKey="Balance" stroke="#06b6d4" strokeWidth={2.5} activeDot={{ r: 7 }} name="Balance ($)" />
+                      <Line type="monotone" dataKey="Equity" stroke="#8b5cf6" strokeWidth={1.5} strokeDasharray="4 4" name="Equity ($)" />
+                    </>
+                  )}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            <p className="text-[10px] text-slate-600 font-mono text-center mt-3">
+              Simulated data — win rate {bot.winRate}%, max drawdown {bot.maxDrawdown}%. Past performance ≠ future results.
+            </p>
           </div>
         </div>
 
-        {/* Purchase & Licensing Sidebar (Col-1) */}
-        <div className="space-y-6">
-          <div className="bg-slate-900 border border-emerald-500/20 rounded-3xl p-6 relative overflow-hidden">
-            {/* Gradient background highlights */}
-            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 blur-3xl rounded-full"></div>
-            
-            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-4 flex items-center space-x-2">
-              <Cpu className="w-4 h-4 text-emerald-400" />
-              <span>Licensing Terminal</span>
-            </h3>
+        {/* Right: License sidebar */}
+        <div className="space-y-5">
+          <div className="relative rounded-2xl overflow-hidden p-6 card-ink border-cyan-500/20">
+            {/* Violet orb glow */}
+            <div className="orb orb-violet w-48 h-48 -top-12 -right-12 opacity-50" />
 
-            {/* Price section */}
-            <div className="flex items-baseline space-x-2 bg-slate-950 p-4 rounded-2xl border border-slate-800/80 mb-6">
-              <span className="text-xs text-slate-400 font-medium">Single Dev License:</span>
-              <span className="text-2xl font-mono font-black text-white ml-auto">
-                {bot.price === 0 ? <span className="text-emerald-400">FREE</span> : `$${bot.price}`}
+            <div className="flex items-center gap-2 mb-5">
+              <Cpu className="w-4 h-4 text-cyan-400" />
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">License Terminal</h3>
+              <span className="ml-auto flex items-center gap-1 text-[10px] text-emerald-400 font-mono">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Online
               </span>
             </div>
 
-            {/* Display status depending on whether verified profile owns the EA bot already */}
+            <div className="flex items-baseline justify-between bg-black/40 border border-cyan-500/8 rounded-xl px-4 py-3 mb-5">
+              <span className="text-xs text-slate-500">Single Dev License</span>
+              <span className="text-2xl font-mono font-black">
+                {bot.price === 0
+                  ? <span className="text-emerald-400">FREE</span>
+                  : <span className="text-white">${bot.price}</span>}
+              </span>
+            </div>
+
             {owned ? (
               <div className="space-y-4">
-                <div className="bg-emerald-500/10 border border-emerald-500/30 p-4 rounded-2xl flex items-start space-x-3">
+                <div className="bg-emerald-500/8 border border-emerald-500/22 p-4 rounded-xl flex items-start gap-3">
                   <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
                   <div>
-                    <h4 className="text-sm font-bold text-emerald-400 uppercase tracking-wide">License Active</h4>
-                    <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-                      You own a verified license key for <strong>{bot.name}</strong>. Assign it to your platform terminals.
-                    </p>
+                    <div className="text-sm font-bold text-emerald-400 uppercase tracking-wide">License Active</div>
+                    <p className="text-xs text-slate-400 mt-1 leading-relaxed">You own a verified license for <strong>{bot.name}</strong>.</p>
                   </div>
                 </div>
-
-                {/* License details */}
                 {licenseInfo && (
-                  <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 text-xs font-mono space-y-2">
-                    <div className="flex justify-between border-b border-slate-850 pb-1.5">
-                      <span className="text-slate-500">License ID:</span>
-                      <span className="text-slate-300">{licenseInfo.id}</span>
+                  <div className="bg-black/40 border border-cyan-500/8 rounded-xl p-4 text-xs font-mono space-y-2">
+                    <div className="flex justify-between border-b border-white/5 pb-1.5">
+                      <span className="text-slate-600">License ID</span>
+                      <span className="text-slate-400 truncate max-w-[140px]">{licenseInfo.id}</span>
                     </div>
-                    <div className="flex justify-between border-b border-slate-850 pb-1.5">
-                      <span className="text-slate-500">Key:</span>
-                      <span className="text-amber-400 font-semibold">{licenseInfo.licenseKey}</span>
+                    <div className="flex justify-between border-b border-white/5 pb-1.5">
+                      <span className="text-slate-600">Key</span>
+                      <span className="text-cyan-400 font-bold">{licenseInfo.licenseKey}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-500">Status:</span>
-                      <span className="text-emerald-400">ONLINE</span>
+                      <span className="text-slate-600">Status</span>
+                      <span className="text-emerald-400 font-bold">● ACTIVE</span>
                     </div>
                   </div>
                 )}
-
-                {/* Simulated File Download Button */}
                 <button
-                  id="simulate-download-btn"
-                  onClick={triggerDownloadSim}
-                  className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 py-3.5 rounded-2xl font-bold flex items-center justify-center space-x-2 shadow-lg shadow-emerald-500/10 transition-all font-sans"
+                  onClick={() => {
+                    if (licenseInfo) {
+                      const f = simulateDownloadFile(bot.name, bot.sourceFileName, licenseInfo.licenseKey);
+                      setDownloadedFile(f);
+                    }
+                  }}
+                  className="btn-cyan w-full py-3.5 rounded-xl flex items-center justify-center gap-2 text-sm"
                 >
-                  <Download className="w-5 h-5" />
-                  <span>Download EA Bot File</span>
+                  <Download className="w-5 h-5" /> Download EA File
                 </button>
               </div>
             ) : (
               <div className="space-y-4">
                 {userProfile ? (
-                  <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 text-center mb-4">
-                    <span className="text-xs text-slate-400 block mb-1">Your Available Sim Balance:</span>
-                    <span className="text-lg font-mono font-bold text-amber-450 text-amber-400">
-                      ${userProfile.balance.toLocaleString()}
-                    </span>
+                  <div className="bg-black/40 border border-cyan-500/8 rounded-xl p-4 text-center">
+                    <div className="text-xs text-slate-500 mb-1 font-mono">Your Sim Balance</div>
+                    <div className="text-lg font-mono font-black text-cyan-400">${userProfile.balance.toLocaleString()}</div>
                   </div>
                 ) : (
-                  <div className="bg-amber-500/10 border border-amber-500/30 p-4 rounded-2xl flex items-start space-x-3 mb-4">
-                    <Lock className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                    <p className="text-xs text-slate-300">
-                      You must sign in to acquire and deploy licenses for this Expert Advisor.
-                    </p>
+                  <div className="bg-cyan-500/5 border border-cyan-500/15 p-4 rounded-xl flex items-start gap-3">
+                    <Lock className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+                    <p className="text-xs text-slate-400">Sign in to acquire a license for this Expert Advisor.</p>
                   </div>
                 )}
-
                 <button
-                  id="checkout-license-btn"
                   disabled={!userProfile || purchasing}
                   onClick={handleCheckout}
-                  className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 py-3.5 rounded-2xl font-bold flex items-center justify-center space-x-2 shadow-lg shadow-emerald-500/10 transition-all"
+                  className={`w-full py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 text-sm transition-all ${
+                    !userProfile || purchasing
+                      ? 'bg-white/4 text-slate-600 cursor-not-allowed border border-white/6'
+                      : 'btn-cyan'
+                  }`}
                 >
                   {purchasing ? (
-                    <>
-                      <RefreshCw className="w-5 h-5 animate-spin" />
-                      <span>Securing License...</span>
-                    </>
+                    <><RefreshCw className="w-5 h-5 animate-spin" /> Securing License…</>
                   ) : (
-                    <>
-                      <Lock className="w-4 h-4" />
-                      <span>{bot.price === 0 ? "Get Free License" : "Purchase & License"}</span>
-                    </>
+                    <><Zap className="w-4 h-4" /> {bot.price === 0 ? 'Get Free License' : 'Purchase License'}</>
                   )}
                 </button>
-                
                 {userProfile && userProfile.balance < bot.price && (
-                  <p className="text-xs text-rose-400 text-center font-semibold mt-2">
-                    Insufficient Balance! Click "Sim Balance" in navbar to add mock cash.
-                  </p>
+                  <p className="text-xs text-red-400 text-center font-semibold">Insufficient balance — top up in the nav bar.</p>
                 )}
               </div>
             )}
           </div>
 
-          {/* Quick Setup Instructions if owned */}
+          {/* Setup guide */}
           {owned && (
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 text-sm">
-              <h4 className="font-bold flex items-center space-x-2 text-white mb-3">
-                <Settings className="w-4 h-4 text-emerald-400" />
-                <span>Integration Instructions</span>
+            <div className="card-ink rounded-2xl p-5">
+              <h4 className="font-bold flex items-center gap-2 text-white mb-4 text-sm">
+                <Settings className="w-4 h-4 text-cyan-400" /> MT Setup Guide
               </h4>
-              <ol className="list-decimal pl-4 space-y-2 text-xs text-slate-400">
-                <li>Download your EA bot file (<span className="font-mono text-emerald-400">{bot.sourceFileName}</span>) with included license parameters.</li>
-                <li>Open your Metatrader terminal workspace.</li>
-                <li>Go to <span className="text-slate-300">File &gt; Open Data Folder &gt; MQL4/MQL5 &gt; Experts</span>.</li>
-                <li>Drag and drop the downloaded file there.</li>
-                <li>Refresh your navigator menu and drag the bot onto your active chart window.</li>
-                <li>Enter your custom generated License Key in the EA properties popup.</li>
+              <ol className="space-y-2.5">
+                {[
+                  `Download ${bot.sourceFileName} below.`,
+                  'Open MetaTrader terminal.',
+                  'File → Open Data Folder → MQL4/MQL5 → Experts.',
+                  'Drop EA file into Experts folder.',
+                  'Refresh Navigator and drag EA onto chart.',
+                  'Enter license key in EA properties.',
+                ].map((step, i) => (
+                  <li key={i} className="flex gap-2.5 text-xs text-slate-500 leading-relaxed">
+                    <span className="flex-shrink-0 w-4 h-4 rounded bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 font-bold font-mono text-[9px] mt-0.5">
+                      {i + 1}
+                    </span>
+                    <span>{step}</span>
+                  </li>
+                ))}
               </ol>
             </div>
           )}
         </div>
       </div>
 
-      {/* Code Display Sandbox if downloaded */}
+      {/* Code sandbox */}
       {downloadedFile && (
-        <div className="bg-slate-950 border border-slate-800 rounded-3xl p-6 mb-8 font-mono text-xs overflow-x-auto relative">
-          <div className="absolute top-4 right-4 text-[10px] text-emerald-400 uppercase font-bold bg-emerald-500/10 px-2 py-1 rounded">
-            MQL Live Code
-          </div>
-          <h4 className="text-sm font-sans font-bold text-white mb-3 flex items-center space-x-2">
-            <FileCode className="w-4 h-4 text-emerald-400" />
-            <span>Generated EX Compiler Snippet ({bot.sourceFileName})</span>
+        <div className="bg-black/70 border border-cyan-500/15 rounded-2xl p-6 mb-10 font-mono text-xs overflow-x-auto relative animate-fade-in">
+          <div className="absolute top-4 right-4 text-[10px] text-cyan-400 bg-cyan-500/8 border border-cyan-500/15 px-2.5 py-1 rounded font-mono font-bold uppercase tracking-wider">MQL Source</div>
+          <h4 className="text-sm font-sans font-bold text-white mb-4 flex items-center gap-2">
+            <FileCode className="w-4 h-4 text-cyan-400" /> {bot.sourceFileName}
           </h4>
-          <pre className="text-slate-400 select-all p-4 bg-slate-900/60 rounded-xl overflow-x-auto line-clamp-[25] hover:line-clamp-none transition-all duration-350 cursor-pointer">
-            {downloadedFile}
-          </pre>
+          <pre className="text-slate-400 select-all p-4 bg-cyan-500/3 border border-cyan-500/8 rounded-xl overflow-x-auto">{downloadedFile}</pre>
         </div>
       )}
 
-      {/* Community review boards section */}
+      {/* Reviews section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
-        {/* Write a Review Form if owned */}
         <div className="lg:col-span-1">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sticky top-28">
-            <h3 className="text-base font-bold text-white mb-4 flex items-center space-x-2">
-              <Star className="w-5 h-5 text-amber-400 fill-amber-400" />
-              <span>Give Your Review</span>
+          <div className="card-ink rounded-2xl p-6 sticky top-24">
+            <h3 className="text-base font-bold text-white mb-5 flex items-center gap-2">
+              <Star className="w-5 h-5 text-violet-400 fill-violet-400" /> Write a Review
             </h3>
-
             {userProfile && owned ? (
               <form onSubmit={handleSubmitReview} className="space-y-4">
                 <div>
-                  <label className="text-xs text-slate-400 font-mono block uppercase mb-1">Rating Score</label>
-                  <div className="flex items-center space-x-1.5">
-                    {[1, 2, 3, 4, 5].map((s) => (
-                      <button
-                        type="button"
-                        key={s}
-                        onClick={() => setRating(s)}
-                        className={`p-1.5 rounded-lg transition-all ${
-                          rating >= s ? 'text-amber-400' : 'text-slate-600'
-                        }`}
+                  <label className="text-[10px] text-slate-500 font-mono uppercase tracking-wider block mb-2">Your Rating</label>
+                  <div className="flex gap-1">
+                    {[1,2,3,4,5].map(s => (
+                      <button key={s} type="button" onClick={() => setRating(s)}
+                        className={`p-1 rounded transition-colors ${rating >= s ? 'text-violet-400' : 'text-slate-700'}`}
                       >
-                        <Star className={`w-6 h-6 ${rating >= s ? 'fill-amber-400' : 'fill-transparent'}`} />
+                        <Star className={`w-6 h-6 ${rating >= s ? 'fill-violet-400' : ''}`} />
                       </button>
                     ))}
                   </div>
                 </div>
-
                 <div>
-                  <label className="text-xs text-slate-400 font-mono block uppercase mb-1">Written Feedback</label>
+                  <label className="text-[10px] text-slate-500 font-mono uppercase tracking-wider block mb-2">Review</label>
                   <textarea
-                    required
-                    value={comment}
-                    onChange={(e) => setComment(e.target.value)}
-                    placeholder="Describe your returns, drawdown, win experiences, or recommended settings..."
+                    required value={comment} onChange={e => setComment(e.target.value)}
+                    placeholder="Describe your experience…"
                     rows={4}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm focus:outline-none focus:border-emerald-500 transition-all text-white"
+                    className="input-dark resize-none"
                   />
                 </div>
-
-                <button
-                  type="submit"
-                  disabled={submittingReview}
-                  className="w-full bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-bold py-2.5 rounded-xl text-xs uppercase tracking-wider flex items-center justify-center space-x-2"
+                <button type="submit" disabled={submittingReview}
+                  className="w-full btn-violet py-2.5 rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-2"
                 >
-                  <PlusCircle className="w-4 h-4" />
-                  <span>Post Review</span>
+                  <PlusCircle className="w-4 h-4" /> {submittingReview ? 'Submitting…' : 'Post Review'}
                 </button>
               </form>
             ) : !userProfile ? (
-              <p className="text-xs text-slate-400 text-center leading-relaxed py-4 border border-dashed border-slate-800 rounded-2xl">
-                Please connect your wallet in the navbar to rate this bot.
-              </p>
+              <p className="text-xs text-slate-500 text-center py-6 border border-dashed border-white/8 rounded-xl">Sign in to leave a review.</p>
             ) : (
-              <p className="text-xs text-slate-400 text-center leading-relaxed py-4 border border-dashed border-slate-800 rounded-2xl">
-                You must possess an active licensed installation of this EA to post your trading performance feedback.
-              </p>
+              <p className="text-xs text-slate-500 text-center py-6 border border-dashed border-white/8 rounded-xl">Purchase this EA to write a review.</p>
             )}
           </div>
         </div>
 
-        {/* Reviews List */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6">
-            <h3 className="text-base font-bold text-white mb-6 flex items-center space-x-2 pb-3 border-b border-slate-850">
-              <span>Trader Reviews</span>
-              <span className="text-xs bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full font-sans font-semibold">
-                {reviews.length} total
-              </span>
+        <div className="lg:col-span-2">
+          <div className="card-ink rounded-2xl p-6">
+            <h3 className="text-base font-bold text-white mb-5 flex items-center gap-2 pb-4 border-b border-cyan-500/8">
+              Trader Reviews
+              <span className="text-xs bg-white/5 text-slate-400 px-2 py-0.5 rounded-full font-sans">{reviews.length}</span>
             </h3>
-
             {reviews.length === 0 ? (
               <div className="text-center py-12">
-                <p className="text-xs text-slate-500 font-mono">No reviews listed for this EA yet. Be the first to try and rate it!</p>
+                <p className="text-xs text-slate-600 font-mono">No reviews yet. Be the first to rate this EA!</p>
               </div>
             ) : (
-              <div className="space-y-4">
-                {reviews.map((rev) => (
-                  <div key={rev.id} className="bg-slate-950/60 p-4 border border-slate-850 rounded-2xl flex items-start space-x-3 text-slate-300">
+              <div className="space-y-4 stagger-children">
+                {reviews.map(rev => (
+                  <div key={rev.id} className="bg-black/30 border border-cyan-500/6 p-4 rounded-xl flex gap-3 animate-fade-in hover:border-cyan-500/15 transition-colors">
                     <img
                       referrerPolicy="no-referrer"
                       src={rev.userPhoto || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80'}
                       alt={rev.userName}
-                      className="w-9 h-9 rounded-xl object-cover ring-1 ring-slate-800 shrink-0"
+                      className="w-9 h-9 rounded-xl object-cover ring-1 ring-cyan-500/15 shrink-0"
                     />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
-                        <h4 className="text-xs font-bold text-slate-200 truncate">{rev.userName}</h4>
-                        <div className="flex items-center space-x-0.5">
-                          {[1, 2, 3, 4, 5].map((s) => (
-                            <Star 
-                              key={s} 
-                              className={`w-3.5 h-3.5 ${rev.rating >= s ? 'text-amber-400 fill-amber-400' : 'text-slate-850'}`} 
-                            />
+                        <span className="text-xs font-bold text-slate-200 truncate">{rev.userName}</span>
+                        <div className="flex gap-0.5">
+                          {[1,2,3,4,5].map(s => (
+                            <Star key={s} className={`w-3 h-3 ${rev.rating >= s ? 'text-violet-400 fill-violet-400' : 'text-slate-700'}`} />
                           ))}
                         </div>
                       </div>
-                      
-                      <p className="text-xs text-slate-400 mb-2 font-mono">
-                        {rev.createdAt?.seconds 
-                          ? new Date(rev.createdAt.seconds * 1000).toLocaleDateString()
-                          : 'Recent'
-                        }
+                      <p className="text-[10px] text-slate-600 font-mono mb-2">
+                        {rev.createdAt?.seconds ? new Date(rev.createdAt.seconds * 1000).toLocaleDateString() : 'Recently'}
                       </p>
-
-                      <p className="text-sm text-slate-300 font-sans leading-relaxed whitespace-pre-wrap">
-                        {rev.comment}
-                      </p>
-
-                      {userProfile && userProfile.id === rev.userId && (
-                        <button
-                          onClick={() => handleDeleteReview(rev.id)}
-                          className="flex items-center space-x-1.5 text-rose-400 mt-3 text-[10px] uppercase tracking-wider font-extrabold hover:underline"
+                      <p className="text-sm text-slate-400 leading-relaxed">{rev.comment}</p>
+                      {userProfile?.id === rev.userId && (
+                        <button onClick={() => handleDeleteReview(rev.id)}
+                          className="flex items-center gap-1 text-red-500 hover:text-red-400 text-[10px] font-bold uppercase mt-3 transition-colors"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span>Remove Review</span>
+                          <Trash2 className="w-3.5 h-3.5" /> Delete
                         </button>
                       )}
                     </div>
@@ -727,73 +478,55 @@ export default function BotDetails({ bot, userProfile, onBack, owned, onPurchase
         </div>
       </div>
 
-      {/* Floating Chat Button */}
+      {/* Floating chat */}
       <button
         onClick={() => setShowChatModal(true)}
-        className="fixed bottom-8 right-8 z-50 bg-emerald-500 hover:bg-emerald-400 text-slate-950 p-4 rounded-full shadow-xl shadow-emerald-500/20 transition-all hover:scale-105"
+        className="fixed bottom-8 right-8 z-50 btn-cyan w-14 h-14 rounded-full flex items-center justify-center shadow-2xl shadow-cyan-500/25 animate-pulse-ring"
       >
         <MessageCircle className="w-6 h-6" />
       </button>
 
-      {/* Chat Modal */}
+      {/* Chat modal */}
       {showChatModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl relative animate-fade-in-up">
-            {/* Header */}
-            <div className="bg-slate-850 p-4 border-b border-slate-800 flex justify-between items-center">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center border border-slate-700">
-                  <Cpu className="w-5 h-5 text-emerald-400" />
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
+          <div className="card-ink rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-fade-in-up border-cyan-500/20">
+            <div className="p-4 border-b border-cyan-500/8 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
+                  <Cpu className="w-5 h-5 text-cyan-400" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-white">Chat with {bot.ownerName}</h3>
-                  <p className="text-xs text-slate-400">Developer of {bot.name}</p>
+                  <div className="text-sm font-bold text-white">{bot.ownerName}</div>
+                  <div className="text-[10px] text-slate-500 font-mono">{bot.name} developer</div>
                 </div>
               </div>
-              <button 
-                onClick={() => setShowChatModal(false)}
-                className="text-slate-500 hover:text-white transition p-2 cursor-pointer"
-              >
+              <button onClick={() => setShowChatModal(false)} className="text-slate-600 hover:text-white p-2 transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </div>
-            
-            {/* Body */}
             <div className="p-6">
               {chatSent ? (
-                <div className="text-center py-8">
+                <div className="text-center py-8 animate-fade-in">
                   <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto mb-4" />
                   <h4 className="text-lg font-bold text-white mb-2">Message Sent!</h4>
-                  <p className="text-sm text-slate-400">
-                    The developer will review your inquiry. Since this is a simulated sandbox, mock communication stops here.
-                  </p>
+                  <p className="text-sm text-slate-500">The developer will review your inquiry.</p>
                 </div>
               ) : (
-                <form onSubmit={handleSendMessage}>
-                  <p className="text-xs text-slate-400 mb-4 font-mono uppercase tracking-widest text-center border-b border-slate-800 pb-4">
-                    Secure Encrypted Channel
-                  </p>
-                  
-                  <div className="mb-4">
-                    <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                       Message To Developer
-                    </label>
-                    <textarea 
-                      required
-                      value={chatMessage}
-                      onChange={(e) => setChatMessage(e.target.value)}
-                      placeholder={`Hello, I have a question about ${bot.name}'s strategy settings...`}
-                      rows={5}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm focus:outline-none focus:border-emerald-500 transition-all text-white max-h-48 resize-none"
-                    ></textarea>
-                  </div>
-                  
-                  <button
-                    type="submit"
-                    className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 py-3 rounded-xl font-bold flex items-center justify-center space-x-2 transition-all cursor-pointer"
-                  >
-                    <Send className="w-4 h-4" />
-                    <span>Send Message</span>
+                <form onSubmit={e => {
+                  e.preventDefault();
+                  setChatSent(true);
+                  setTimeout(() => { setShowChatModal(false); setChatSent(false); setChatMessage(''); }, 2500);
+                }}>
+                  <div className="text-[10px] text-slate-600 font-mono uppercase tracking-widest text-center mb-5">Encrypted Channel</div>
+                  <label className="text-xs text-slate-500 font-mono uppercase tracking-wider block mb-2">Message</label>
+                  <textarea
+                    required value={chatMessage} onChange={e => setChatMessage(e.target.value)}
+                    placeholder={`Ask about ${bot.name}'s configuration…`}
+                    rows={5}
+                    className="input-dark mb-4 resize-none"
+                  />
+                  <button type="submit" className="btn-cyan w-full py-3 rounded-xl flex items-center justify-center gap-2 text-sm">
+                    <Send className="w-4 h-4" /> Send Message
                   </button>
                 </form>
               )}
@@ -801,7 +534,6 @@ export default function BotDetails({ bot, userProfile, onBack, owned, onPurchase
           </div>
         </div>
       )}
-
     </div>
   );
 }

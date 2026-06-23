@@ -1,6 +1,6 @@
 import React from 'react';
 import { EABot } from '../types';
-import { Star, ShieldCheck, Download, BarChart2, CheckCircle2, ChevronRight } from 'lucide-react';
+import { Star, ShieldCheck, Zap, ChevronRight, CheckCircle2, TrendingDown, TrendingUp } from 'lucide-react';
 
 interface BotCardProps {
   bot: EABot;
@@ -8,109 +8,112 @@ interface BotCardProps {
   owned: boolean;
 }
 
-const BotCard: React.FC<BotCardProps> = ({ bot, onSelect, owned }) => {
-  // Select color for strategy badge
-  const getStrategyStyle = (strategy: string) => {
-    switch (strategy) {
-      case 'Grid': return 'bg-purple-500/10 text-purple-400 border-purple-500/20';
-      case 'Hedging': return 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20';
-      case 'Scalping': return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
-      case 'Trend': return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
-      case 'Arbitrage': return 'bg-amber-500/10 text-amber-400 border-amber-500/20';
-      default: return 'bg-slate-500/10 text-slate-400 border-slate-500/20';
-    }
+const getStrategyStyle = (strategy: string): string => {
+  const map: Record<string, string> = {
+    Grid: 'badge-grid', Scalping: 'badge-scalping', Trend: 'badge-trend',
+    Hedging: 'badge-hedging', Arbitrage: 'badge-arbitrage', News: 'badge-news',
   };
+  return map[strategy] || 'bg-slate-800 text-slate-400 border-slate-700';
+};
+
+const getPlatformColor = (platform: string) => {
+  if (platform === 'MT5') return 'text-violet-400';
+  if (platform === 'Both') return 'text-emerald-400';
+  return 'text-cyan-400';
+};
+
+export default function BotCard({ bot, onSelect, owned }: BotCardProps) {
+  const stars = Math.round(bot.rating);
 
   return (
-    <div 
-      id={`bot-card-${bot.id}`}
+    <div
       onClick={() => onSelect(bot)}
-      className="bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-2xl p-5 hover:-translate-y-1 hover:shadow-xl hover:shadow-emerald-900/[0.04] transition-all duration-300 cursor-pointer flex flex-col justify-between group h-full"
+      className="card-ink shimmer-sweep rounded-2xl p-5 cursor-pointer group transition-all duration-350 hover:-translate-y-2 hover:shadow-2xl hover:shadow-cyan-500/8 flex flex-col h-full animate-fade-in"
     >
-      <div>
-        {/* Header Badges */}
-        <div className="flex items-center justify-between mb-4">
-          <span className={`px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider rounded-lg border ${getStrategyStyle(bot.strategy)}`}>
+      {/* Top accent line — animated glow */}
+      <div className="absolute top-0 left-6 right-6 h-px bg-gradient-to-r from-transparent via-cyan-500/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+
+      {/* Header row */}
+      <div className="flex items-start justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg border ${getStrategyStyle(bot.strategy)}`}>
             {bot.strategy}
           </span>
-          <div className="flex items-center space-x-1">
-            <span className="text-xs font-mono font-bold text-slate-400">{bot.platform}</span>
-            <span className="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded font-mono font-medium uppercase">{bot.category}</span>
-          </div>
-        </div>
-
-        {/* Title */}
-        <h3 className="font-sans font-bold text-lg text-white group-hover:text-emerald-400 transition-colors line-clamp-1">
-          {bot.name}
-        </h3>
-        
-        {/* Developer line */}
-        <p className="text-xs text-slate-400 font-medium mb-4 flex items-center mb-4">
-          by <span className="text-slate-300 ml-1 hover:underline">{bot.ownerName}</span>
           {bot.ownerId === 'system_seed' && (
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 ml-1" />
+            <span className="flex items-center gap-1 text-[10px] font-bold text-cyan-400 bg-cyan-500/10 px-2 py-1 rounded-lg border border-cyan-500/20">
+              <ShieldCheck className="w-3 h-3" /> Verified
+            </span>
           )}
-        </p>
-
-        {/* Description Snippet */}
-        <p className="text-sm text-slate-400 line-clamp-2 leading-relaxed mb-5 h-10">
-          {bot.description}
-        </p>
-
-        {/* Highlight Numbers Grid */}
-        <div className="grid grid-cols-3 gap-2.5 bg-slate-950/60 p-3 rounded-xl border border-slate-800/40 mb-5">
-          <div className="text-center">
-            <span className="text-[9px] text-slate-400 uppercase font-mono tracking-wider font-semibold block leading-none">Monthly Return</span>
-            <span className="text-sm font-mono text-emerald-400 font-bold leading-normal block mt-1">
-              +{bot.monthlyProfit}%
-            </span>
-          </div>
-          <div className="text-center border-x border-slate-800/50">
-            <span className="text-[9px] text-slate-400 uppercase font-mono tracking-wider font-semibold block leading-none">Max Drawdown</span>
-            <span className="text-sm font-mono text-rose-400 font-bold leading-normal block mt-1">
-              {bot.maxDrawdown}%
-            </span>
-          </div>
-          <div className="text-center">
-            <span className="text-[9px] text-slate-400 uppercase font-mono tracking-wider font-semibold block leading-none">Win Rate</span>
-            <span className="text-sm font-mono text-amber-400 font-bold leading-normal block mt-1">
-              {bot.winRate}%
-            </span>
-          </div>
+        </div>
+        <div className="text-right">
+          <span className={`text-xs font-mono font-black ${getPlatformColor(bot.platform)}`}>{bot.platform}</span>
+          <div className="text-[9px] text-slate-500 font-mono uppercase">{bot.category}</div>
         </div>
       </div>
 
-      {/* Footer Details */}
-      <div className="flex items-center justify-between border-t border-slate-800/60 pt-4 mt-auto">
-        {/* Cost */}
+      {/* Title */}
+      <h3 className="font-black text-lg text-white group-hover:text-cyan-300 transition-colors duration-300 leading-tight mb-1">
+        {bot.name}
+      </h3>
+      <p className="text-xs text-slate-500 font-medium mb-3">
+        by <span className="text-slate-400">{bot.ownerName}</span>
+      </p>
+
+      {/* Description */}
+      <p className="text-sm text-slate-500 line-clamp-2 leading-relaxed mb-4 flex-grow">
+        {bot.description}
+      </p>
+
+      {/* Metric grid */}
+      <div className="metric-tile p-3 mb-4 grid grid-cols-3 gap-2">
+        <div className="text-center">
+          <div className="text-[9px] text-slate-500 uppercase font-mono tracking-wider">Monthly</div>
+          <div className="text-sm font-mono font-black text-emerald-400 mt-0.5">+{bot.monthlyProfit}%</div>
+        </div>
+        <div className="text-center border-x border-cyan-500/10">
+          <div className="text-[9px] text-slate-500 uppercase font-mono tracking-wider">Drawdown</div>
+          <div className="text-sm font-mono font-black text-red-400 mt-0.5">{bot.maxDrawdown}%</div>
+        </div>
+        <div className="text-center">
+          <div className="text-[9px] text-slate-500 uppercase font-mono tracking-wider">Win Rate</div>
+          <div className="text-sm font-mono font-black text-cyan-400 mt-0.5">{bot.winRate}%</div>
+        </div>
+      </div>
+
+      {/* Stars */}
+      {bot.rating > 0 && (
+        <div className="flex items-center gap-1 mb-4">
+          {[1,2,3,4,5].map(s => (
+            <Star key={s} className={`w-3.5 h-3.5 transition-colors ${stars >= s ? 'text-violet-400 fill-violet-400' : 'text-slate-700'}`} />
+          ))}
+          <span className="text-[11px] text-slate-500 ml-1 font-mono">{bot.rating.toFixed(1)}</span>
+          <span className="text-[11px] text-slate-600 ml-auto font-mono">{bot.downloads} installs</span>
+        </div>
+      )}
+
+      {/* Footer */}
+      <div className="flex items-center justify-between pt-4 border-t border-cyan-500/8">
         <div>
-          <span className="text-[10px] text-slate-500 uppercase tracking-widest block font-mono">EA Licence Price</span>
-          <span className="text-lg font-mono font-bold text-white">
+          <div className="text-[9px] text-slate-600 font-mono uppercase tracking-widest">License Price</div>
+          <div className="text-lg font-mono font-black">
             {bot.price === 0 ? (
               <span className="text-emerald-400">FREE</span>
             ) : (
-              `$${bot.price}`
+              <span className="text-white">${bot.price}</span>
             )}
-          </span>
+          </div>
         </div>
 
-        {/* Status / Call to Action */}
-        <div>
-          {owned ? (
-            <span className="flex items-center space-x-1 text-xs bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-semibold px-3 py-1.5 rounded-xl">
-              <CheckCircle2 className="w-3.5 h-3.5 stroke-[2.5]" />
-              <span>Owned</span>
-            </span>
-          ) : (
-            <span className="flex items-center space-x-0.5 text-xs text-slate-300 font-semibold border border-slate-800 group-hover:border-emerald-500/30 group-hover:text-emerald-400 group-hover:bg-emerald-500/5 px-3 py-1.5 rounded-xl transition-all">
-              <span>View Bot</span>
-              <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
-            </span>
-          )}
-        </div>
+        {owned ? (
+          <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/25 px-3 py-1.5 rounded-xl">
+            <CheckCircle2 className="w-3.5 h-3.5" /> Owned
+          </span>
+        ) : (
+          <span className="flex items-center gap-1 text-xs font-bold text-slate-400 group-hover:text-cyan-300 border border-white/8 group-hover:border-cyan-500/35 group-hover:bg-cyan-500/8 px-3 py-1.5 rounded-xl transition-all duration-200">
+            View Bot <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+          </span>
+        )}
       </div>
     </div>
   );
-};
-
-export default BotCard;
+}
