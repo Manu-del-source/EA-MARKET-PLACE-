@@ -104,14 +104,22 @@ export default function App() {
       seller_status: 'none' as const,
       balance: 5000,
     };
-    // Insert if new, else fetch existing
-    const { data: existing } = await supabase.from('users').select('*').eq('id', user.id).single();
-    if (!existing) {
-      const { error } = await supabase.from('users').insert(profile);
-      if (error) handleSupabaseError(error, 'upsertProfile/insert');
-      setUserProfile(toUserProfile({ ...profile, created_at: new Date().toISOString() }));
-    } else {
+
+    // Upsert: insert if new, skip if already exists (preserves existing balance/sellerStatus)
+    const { error: upsertError } = await supabase
+      .from('users')
+      .upsert(profile, { onConflict: 'id', ignoreDuplicates: true });
+    if (upsertError) handleSupabaseError(upsertError, 'upsertProfile/upsert');
+
+    // Always fetch current row so we get real balance + sellerStatus
+    const { data: existing, error: fetchError } = await supabase
+      .from('users').select('*').eq('id', user.id).single();
+
+    if (existing) {
       setUserProfile(toUserProfile(existing));
+    } else {
+      if (fetchError) handleSupabaseError(fetchError, 'upsertProfile/fetch');
+      setUserProfile(toUserProfile({ ...profile, created_at: new Date().toISOString() }));
     }
     setLoadingAuth(false);
   };
