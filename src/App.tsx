@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { supabase, signInWithGoogle, logoutUser, handleSupabaseError } from './supabase';
+import { supabase, signInWithGoogle, logoutUser, handleSupabaseError, isMisconfigured } from './supabase';
 import { UserProfile, EABot, Purchase, toUserProfile, toEABot, toPurchase } from './types';
 import Navigation from './components/Navigation';
 import BotCard from './components/BotCard';
@@ -373,6 +373,33 @@ export default function App() {
       </div>
     );
   };
+
+  if (isMisconfigured) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#030712] p-6">
+        <div className="max-w-lg w-full card-ink rounded-2xl p-8 border-red-500/30 text-center">
+          <div className="w-16 h-16 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center mx-auto mb-5">
+            <Zap className="w-8 h-8 text-red-400" />
+          </div>
+          <h1 className="text-2xl font-black text-white mb-3">Supabase Not Configured</h1>
+          <p className="text-slate-400 text-sm leading-relaxed mb-6">
+            The app is missing its environment variables. Add these to your deployment platform:
+          </p>
+          <div className="bg-black/60 border border-cyan-500/15 rounded-xl p-4 text-left font-mono text-xs text-slate-300 mb-6 space-y-2">
+            <div><span className="text-cyan-400">VITE_SUPABASE_URL</span>=https://xxxx.supabase.co</div>
+            <div><span className="text-cyan-400">VITE_SUPABASE_ANON_KEY</span>=eyJxxx...</div>
+          </div>
+          <p className="text-xs text-slate-500">
+            Find these under your Supabase project → <span className="text-cyan-400 font-semibold">Settings → API</span>
+          </p>
+          <div className="mt-4 pt-4 border-t border-white/5 text-xs text-slate-600 font-mono leading-relaxed">
+            Vercel → Project → Settings → Environment Variables<br />
+            Netlify → Site → Site configuration → Environment variables
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col scan-overlay">
