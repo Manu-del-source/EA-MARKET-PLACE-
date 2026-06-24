@@ -54,6 +54,30 @@ export default function BotDetails({ bot, userProfile, onBack, owned, onPurchase
     if (!error && data) setLicenseInfo(toPurchase(data));
   };
 
+  const handleDownload = async () => {
+    const filePath = (bot as any).filePath as string | undefined;
+    if (!filePath) {
+      // Fallback to simulated file if no real file uploaded
+      if (licenseInfo) setDownloaded(simulateDownloadFile(bot.name, bot.sourceFileName, licenseInfo.licenseKey));
+      return;
+    }
+    // Generate a signed URL (valid 60 seconds)
+    const { data, error } = await supabase.storage
+      .from('ea-files')
+      .createSignedUrl(filePath, 60);
+    if (error || !data?.signedUrl) {
+      alert('Download failed. Please try again.');
+      return;
+    }
+    // Trigger browser download
+    const a = document.createElement('a');
+    a.href = data.signedUrl;
+    a.download = bot.sourceFileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
   const handleCheckout = async () => {
     if (!userProfile) return;
     if (userProfile.balance < bot.price) { alert('Insufficient balance! Click Balance in the nav to top up.'); return; }
@@ -232,7 +256,7 @@ export default function BotDetails({ bot, userProfile, onBack, owned, onPurchase
                     </div>
                   </div>
                 )}
-                <button onClick={() => { if (licenseInfo) setDownloaded(simulateDownloadFile(bot.name, bot.sourceFileName, licenseInfo.licenseKey)); }}
+                <button onClick={handleDownload}
                   className="btn-cyan w-full py-3.5 rounded-xl flex items-center justify-center gap-2 text-sm">
                   <Download className="w-5 h-5" /> Download EA File
                 </button>

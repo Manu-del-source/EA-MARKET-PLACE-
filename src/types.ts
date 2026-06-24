@@ -25,6 +25,7 @@ export interface EABot {
   rating: number;
   status: 'active' | 'inactive';
   sourceFileName: string;
+  filePath: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -86,6 +87,7 @@ export const toEABot = (row: DbBot): EABot => ({
   rating: row.rating,
   status: row.status as EABot['status'],
   sourceFileName: row.source_file_name,
+  filePath: row.file_path ?? '',
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
