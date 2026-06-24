@@ -8,12 +8,12 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
 export const isMisconfigured =
   !import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-if (isMisconfigured) {
-  console.error(
-    '❌ Supabase credentials missing.\n' +
-    'Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your environment.'
-  );
-}
+// Shows in browser console — helps debug Vercel env var issues
+console.log('[EAMarket ENV]', {
+  supabaseUrl: import.meta.env.VITE_SUPABASE_URL ? '✅ set' : '❌ missing',
+  anonKey: import.meta.env.VITE_SUPABASE_ANON_KEY ? '✅ set' : '❌ missing',
+  mode: import.meta.env.MODE,
+});
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
